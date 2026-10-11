@@ -1,0 +1,4 @@
+window.siteContent = {
+    posts: [],
+    team: []
+};

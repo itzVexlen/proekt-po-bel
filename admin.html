@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редактор - Гео Милев: Отвъд дъската</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" type="image/png" href="assets/kubmg48.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Lora:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="admin-page">
+    <header class="header">
+        <div class="container">
+            <div class="logo-section">
+                <div class="book-icon" aria-hidden="true">
+                    <img src="assets/kubmg48.png" alt="Емблема на МГ „Гео Милев“">
+                </div>
+                <div class="title-group">
+                    <h1 class="site-title">Редактор на вестника</h1>
+                    <p class="site-subtitle">Гео Милев: Отвъд дъската</p>
+                </div>
+            </div>
+            <nav class="main-nav" aria-label="Основна навигация"><ul><li><a href="index.html">Към сайта</a></li><li><button id="lock-button" class="text-button" type="button" hidden>Заключи</button></li></ul></nav>
+        </div>
+    </header>
+
+    <main class="admin-main container">
+        <section id="auth-panel" class="admin-auth" aria-labelledby="auth-title">
+            <p class="eyebrow">Администрация</p>
+            <h2 id="auth-title">Вход за редактори</h2>
+            <p id="auth-description" class="form-note">Въведи паролата, за да управляваш съдържанието.</p>
+            <form id="auth-form" class="admin-form">
+                <label for="admin-password">Парола</label>
+                <input id="admin-password" type="password" autocomplete="current-password" required>
+                <button class="button button-primary" id="auth-submit" type="submit">Отключи редактора</button>
+                <p id="auth-message" class="form-message" role="status"></p>
+            </form>
+            <p class="form-note security-note">Паролата е зададена в кода на сайта. Това е само базова заключалка, а не защита на съдържанието от технически достъп.</p>
+        </section>
+
+        <div id="admin-workspace" hidden>
+            <section class="admin-heading">
+                <div><p class="eyebrow">Редакционна система</p><h2>Съдържание</h2><p class="form-note">Промените се записват в този браузър. Изтегли файла за публикуване, за да се виждат от всички посетители.</p></div>
+                <div class="admin-actions">
+                    <button class="button button-secondary" id="backup-button" type="button">Резервно копие JSON</button>
+                    <button class="button button-primary" id="publish-button" type="button">Изтегли js/content-data.js</button>
+                    <label class="button button-secondary file-button" for="import-file">Импортирай JSON</label>
+                    <input id="import-file" type="file" accept="application/json,.json" hidden>
+                </div>
+            </section>
+            <p id="save-message" class="form-message" role="status"></p>
+
+            <section class="admin-section" aria-labelledby="post-form-title">
+                <div class="admin-section-heading"><div><p class="eyebrow">Публикации</p><h2 id="post-form-title">Нова статия</h2></div></div>
+                <form id="post-form" class="admin-form editor-form">
+                    <input id="post-id" type="hidden">
+                    <label for="post-title">Заглавие</label><input id="post-title" name="title" required maxlength="140">
+                    <div class="form-row">
+                        <div><label for="post-category">Рубрика</label><select id="post-category" required><option value="sport">Спорт</option><option value="science">Наука и открития</option><option value="young-scientists">Младите учени</option><option value="school-life">Училищен живот</option><option value="achievements">Нашите успехи</option><option value="creative">Творчески път</option></select></div>
+                        <div><label for="post-date">Дата</label><input id="post-date" type="date" required></div>
+                        <div><label for="post-author">Автор</label><input id="post-author" maxlength="80"></div>
+                    </div>
+                    <label for="post-excerpt">Кратко описание</label><textarea id="post-excerpt" rows="2" maxlength="280" required></textarea>
+                    <label for="post-content">Текст на статията</label><textarea id="post-content" rows="10" required placeholder="Нов абзац: остави празен ред."></textarea>
+                    <div class="form-row image-fields">
+                        <div><label for="post-image">Водеща снимка</label><input id="post-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><small>До 700 KB. Ще се показва над текста.</small></div>
+                        <div><label for="post-image-caption">Надпис под снимката</label><input id="post-image-caption" maxlength="180"></div>
+                    </div>
+                    <div id="post-image-preview" class="image-preview" hidden></div>
+                    <label class="check-row"><input id="remove-post-image" type="checkbox"> Премахни текущата снимка</label>
+                    <div class="form-actions"><button class="button button-primary" type="submit">Запази статията</button><button class="button button-secondary" id="cancel-post-edit" type="button" hidden>Отказ</button></div>
+                    <p id="post-message" class="form-message" role="status"></p>
+                </form>
+                <div class="admin-list-heading"><h3>Записани статии</h3><span id="post-count" class="count-label"></span></div>
+                <div id="post-list" class="admin-list"></div>
+            </section>
+
+            <section class="admin-section" aria-labelledby="team-form-title">
+                <div class="admin-section-heading"><div><p class="eyebrow">Хората зад вестника</p><h2 id="team-form-title">Добави член на екипа</h2></div></div>
+                <form id="team-form" class="admin-form editor-form">
+                    <input id="team-id" type="hidden">
+                    <div class="form-row"><div><label for="team-name">Име</label><input id="team-name" required maxlength="100"></div><div><label for="team-role">Роля</label><input id="team-role" required maxlength="100" placeholder="Редактор, журналист..."></div></div>
+                    <label for="team-description">Кратко представяне</label><textarea id="team-description" rows="3" maxlength="400"></textarea>
+                    <div class="form-actions"><button class="button button-primary" type="submit">Запази члена</button><button class="button button-secondary" id="cancel-team-edit" type="button" hidden>Отказ</button></div>
+                    <p id="team-message" class="form-message" role="status"></p>
+                </form>
+                <div class="admin-list-heading"><h3>Записани членове</h3><span id="team-count" class="count-label"></span></div>
+                <div id="team-list" class="admin-list"></div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="footer"><div class="container"><p>Училищен вестник „Гео Милев: Отвъд дъската“</p></div></footer>
+    <script src="js/content-data.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>
