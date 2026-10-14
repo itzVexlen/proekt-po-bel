@@ -42,13 +42,18 @@
 
         <div id="admin-workspace" hidden>
             <section class="admin-heading">
-                <div><p class="eyebrow">Редакционна система</p><h2>Съдържание</h2><p class="form-note">Промените се записват в този браузър. Изтегли файла за публикуване, за да се виждат от всички посетители.</p></div>
+                <div><p class="eyebrow">Редакционна система</p><h2>Съдържание</h2><p class="form-note">Записвай директно в GitHub, за да публикуваш промените за всички посетители.</p></div>
                 <div class="admin-actions">
                     <button class="button button-secondary" id="backup-button" type="button">Резервно копие JSON</button>
-                    <button class="button button-primary" id="publish-button" type="button">Изтегли js/content-data.js</button>
                     <label class="button button-secondary file-button" for="import-file">Импортирай JSON</label>
                     <input id="import-file" type="file" accept="application/json,.json" hidden>
                 </div>
+            </section>
+            <section class="github-publish" aria-labelledby="github-publish-title">
+                <label id="github-publish-title" for="github-token">Свържи редактора с GitHub</label>
+                <input id="github-token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_...">
+                <button class="button button-primary" id="connect-github-button" type="button">Свържи и зареди</button>
+                <p class="form-note">Създай <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Fine-grained token</a> само за itzVexlen/proekt-po-bel с достъп Contents: Read and write. След свързването всеки запис качва отделен JSON файл с името на публикацията или члена и commit-ва файла и индекса в GitHub. Token-ът остава само в паметта на тази отворена страница.</p>
             </section>
             <p id="save-message" class="form-message" role="status"></p>
 
@@ -93,7 +98,6 @@
     </main>
 
     <footer class="footer"><div class="container"><p>Училищен вестник „Гео Милев: Отвъд дъската“</p></div></footer>
-    <script src="js/content-data.js"></script>
     <script src="js/admin.js"></script>
 </body>
 </html>

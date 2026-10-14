@@ -1,4 +1,0 @@
-window.siteContent = {
-    posts: [],
-    team: []
-};

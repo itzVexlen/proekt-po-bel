@@ -6,40 +6,110 @@ const categories = {
     achievements: 'Нашите успехи',
     creative: 'Творчески път'
 };
-const contentKey = 'newspaper-content';
 const adminPassword = '244466666';
+const githubRepository = 'itzVexlen/proekt-po-bel';
+const githubBranch = 'main';
+const githubContentRoot = 'js/content';
 const authPanel = document.getElementById('auth-panel');
 const authForm = document.getElementById('auth-form');
 const workspace = document.getElementById('admin-workspace');
 const authMessage = document.getElementById('auth-message');
-let content = loadContent();
+let content = normalizeContent(window.siteContent || {});
 let selectedPostImage = '';
+let githubToken = '';
+const remoteIndexes = {
+    posts: { entries: [], sha: null },
+    team: { entries: [], sha: null }
+};
+const remoteFiles = { posts: new Map(), team: new Map() };
+let githubConnected = false;
+let saveInProgress = false;
 
-function loadContent() {
+function normalizeContent(source) {
+    return {
+        posts: Array.isArray(source.posts) ? source.posts : [],
+        team: Array.isArray(source.team) ? source.team.map(member => ({
+            id: member.id,
+            name: member.name,
+            role: member.role,
+            description: member.description || ''
+        })) : []
+    };
+}
+
+async function saveEntry(type, entry, message) {
+    const status = document.getElementById('save-message');
+    if (!githubConnected || !githubToken) {
+        status.textContent = 'Свържи се с GitHub и зареди данните преди да записваш.';
+        document.getElementById('github-token').focus();
+        return false;
+    }
+
+    if (saveInProgress) return false;
+    saveInProgress = true;
+    status.textContent = 'Записване като commit в GitHub…';
     try {
-        const saved = localStorage.getItem(contentKey);
-        const source = saved ? JSON.parse(saved) : (window.siteContent || {});
-        return {
-            posts: Array.isArray(source.posts) ? source.posts : [],
-            team: Array.isArray(source.team) ? source.team.map(member => ({
-                id: member.id,
-                name: member.name,
-                role: member.role,
-                description: member.description || ''
-            })) : []
-        };
-    } catch {
-        return { posts: [], team: [] };
+        const previous = remoteFiles[type].get(String(entry.id));
+        const name = type === 'posts' ? entry.title : entry.name;
+        const path = previous ? previous.path : `${githubContentRoot}/${type}/${slugify(name)}-${entry.id}.json`;
+        const fileResult = await putGitHubJson(path, entry, previous && previous.sha, message);
+        remoteFiles[type].set(String(entry.id), { path, sha: fileResult.content.sha });
+
+        const entries = remoteIndexes[type].entries.filter(item => String(item.id) !== String(entry.id));
+        entries.unshift({ id: entry.id, path });
+        const indexResult = await putGitHubJson(`${githubContentRoot}/${type}/index.json`, entries, remoteIndexes[type].sha, `Update ${type} index`);
+        remoteIndexes[type] = { entries, sha: indexResult.content.sha };
+        content[type] = [entry, ...content[type].filter(item => String(item.id) !== String(entry.id))];
+        renderLists();
+        status.textContent = `Записано в GitHub: ${path}. GitHub Pages ще обнови сайта след кратко изчакване.`;
+        return true;
+    } catch (error) {
+        status.textContent = error.message || 'Неуспешна връзка с GitHub.';
+        return false;
+    } finally {
+        saveInProgress = false;
     }
 }
 
-function saveContent(message = 'Промените са записани в този браузър.') {
+async function deleteEntry(type, id, message) {
+    const status = document.getElementById('save-message');
+    if (!githubConnected || !githubToken) {
+        status.textContent = 'Свържи се с GitHub преди да изтриваш.';
+        return false;
+    }
+    if (saveInProgress) return false;
+
+    const file = remoteFiles[type].get(String(id));
+    if (!file) {
+        status.textContent = 'Не намерих JSON файла в GitHub. Свържи се отново и опитай пак.';
+        return false;
+    }
+
+    saveInProgress = true;
+    status.textContent = 'Изтриване от GitHub…';
     try {
-        localStorage.setItem(contentKey, JSON.stringify(content));
-        document.getElementById('save-message').textContent = message;
+        const response = await fetch(githubContentsUrl(file.path), {
+            method: 'DELETE',
+            headers: { ...githubHeaders(githubToken), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, sha: file.sha, branch: githubBranch })
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || `GitHub не изтри файла (HTTP ${response.status}).`);
+        }
+        remoteFiles[type].delete(String(id));
+        const entries = remoteIndexes[type].entries.filter(item => String(item.id) !== String(id));
+        const indexResult = await putGitHubJson(`${githubContentRoot}/${type}/index.json`, entries, remoteIndexes[type].sha, `Update ${type} index`);
+        remoteIndexes[type] = { entries, sha: indexResult.content.sha };
+        content[type] = content[type].filter(item => String(item.id) !== String(id));
         renderLists();
-    } catch {
-        document.getElementById('save-message').textContent = 'Неуспешен запис. Намали размера на снимките или изтегли резервно копие.';
+        status.textContent = 'Изтрито от GitHub; сайтът ще се обнови след публикуването от Pages.';
+        return true;
+    } catch (error) {
+        status.textContent = error.message || 'Неуспешна връзка с GitHub.';
+        return false;
+    } finally {
+        saveInProgress = false;
     }
 }
 
@@ -142,7 +212,7 @@ document.getElementById('post-image').addEventListener('change', event => readIm
     selectedPostImage = image;
     setPreview('post-image-preview', image);
 }, document.getElementById('post-message')));
-document.getElementById('post-form').addEventListener('submit', event => {
+document.getElementById('post-form').addEventListener('submit', async event => {
     event.preventDefault();
     const idValue = document.getElementById('post-id').value;
     const previous = content.posts.find(post => String(post.id) === idValue);
@@ -160,12 +230,11 @@ document.getElementById('post-form').addEventListener('submit', event => {
         imageCaption: document.getElementById('post-image-caption').value.trim(),
         imageAlt: document.getElementById('post-title').value.trim()
     };
-    content.posts = [post, ...content.posts.filter(item => item.id !== post.id)];
-    saveContent(previous ? 'Статията е обновена.' : 'Статията е добавена.');
-    clearPostForm();
+    const saved = await saveEntry('posts', post, previous ? `Update post: ${post.title}` : `Add post: ${post.title}`);
+    if (saved) clearPostForm();
 });
 
-document.getElementById('team-form').addEventListener('submit', event => {
+document.getElementById('team-form').addEventListener('submit', async event => {
     event.preventDefault();
     const idValue = document.getElementById('team-id').value;
     const previous = content.team.find(member => String(member.id) === idValue);
@@ -175,12 +244,11 @@ document.getElementById('team-form').addEventListener('submit', event => {
         role: document.getElementById('team-role').value.trim(),
         description: document.getElementById('team-description').value.trim()
     };
-    content.team = [...content.team.filter(item => item.id !== member.id), member];
-    saveContent(previous ? 'Членът на екипа е обновен.' : 'Членът на екипа е добавен.');
-    clearTeamForm();
+    const saved = await saveEntry('team', member, previous ? `Update team member: ${member.name}` : `Add team member: ${member.name}`);
+    if (saved) clearTeamForm();
 });
 
-document.getElementById('post-list').addEventListener('click', event => {
+document.getElementById('post-list').addEventListener('click', async event => {
     const editId = event.target.dataset.editPost;
     const deleteId = event.target.dataset.deletePost;
     if (editId) {
@@ -201,12 +269,11 @@ document.getElementById('post-list').addEventListener('click', event => {
         document.getElementById('post-form').scrollIntoView({ behavior: 'smooth' });
     }
     if (deleteId && confirm('Да изтрия ли тази статия?')) {
-        content.posts = content.posts.filter(item => String(item.id) !== deleteId);
-        saveContent('Статията е изтрита.');
+        await deleteEntry('posts', deleteId, 'Delete newspaper post');
     }
 });
 
-document.getElementById('team-list').addEventListener('click', event => {
+document.getElementById('team-list').addEventListener('click', async event => {
     const editId = event.target.dataset.editTeam;
     const deleteId = event.target.dataset.deleteTeam;
     if (editId) {
@@ -221,8 +288,7 @@ document.getElementById('team-list').addEventListener('click', event => {
         document.getElementById('team-form').scrollIntoView({ behavior: 'smooth' });
     }
     if (deleteId && confirm('Да изтрия ли този член на екипа?')) {
-        content.team = content.team.filter(item => String(item.id) !== deleteId);
-        saveContent('Членът на екипа е изтрит.');
+        await deleteEntry('team', deleteId, 'Delete newspaper team member');
     }
 });
 
@@ -232,10 +298,109 @@ document.getElementById('lock-button').addEventListener('click', () => {
     window.location.reload();
 });
 
-document.getElementById('publish-button').addEventListener('click', () => {
-    downloadFile('content-data.js', `window.siteContent = ${JSON.stringify(content, null, 4)};\n`, 'text/javascript');
-    document.getElementById('save-message').textContent = 'Файлът е готов. Замени js/content-data.js в проекта с изтегления файл и публикувай сайта.';
-});
+function githubHeaders(token) {
+    return {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28'
+    };
+}
+
+function githubContentsUrl(path) {
+    const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+    return `https://api.github.com/repos/${githubRepository}/contents/${encodedPath}`;
+}
+
+function slugify(value) {
+    return String(value || 'entry').toLocaleLowerCase().trim()
+        .replace(/[^\p{L}\p{N}]+/gu, '-')
+        .replace(/^-|-$/g, '') || 'entry';
+}
+
+function decodeGitHubContent(encoded) {
+    const binary = atob(encoded.replace(/\s/g, ''));
+    return new TextDecoder().decode(Uint8Array.from(binary, character => character.charCodeAt(0)));
+}
+
+async function readGitHubJson(path, allowMissing = true) {
+    const response = await fetch(`${githubContentsUrl(path)}?ref=${githubBranch}`, {
+        headers: githubHeaders(githubToken),
+        cache: 'no-store'
+    });
+    if (response.status === 404 && allowMissing) return { value: [], sha: null };
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || `GitHub не успя да прочете ${path} (HTTP ${response.status}).`);
+    }
+    const file = await response.json();
+    return { value: JSON.parse(decodeGitHubContent(file.content)), sha: file.sha };
+}
+
+async function putGitHubJson(path, value, sha, message) {
+    const bytes = new TextEncoder().encode(`${JSON.stringify(value, null, 4)}\n`);
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    }
+    const body = { message, content: btoa(binary), branch: githubBranch };
+    if (sha) body.sha = sha;
+    const response = await fetch(githubContentsUrl(path), {
+        method: 'PUT',
+        headers: { ...githubHeaders(githubToken), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(response.status === 409 || response.status === 422
+            ? 'GitHub има по-нова промяна. Свържи се отново и опитай пак.'
+            : error.message || `GitHub не записа ${path} (HTTP ${response.status}).`);
+    }
+    return response.json();
+}
+
+document.getElementById('connect-github-button').addEventListener('click', connectToGitHub);
+
+async function connectToGitHub() {
+    const tokenInput = document.getElementById('github-token');
+    const token = tokenInput.value.trim();
+    const connectButton = document.getElementById('connect-github-button');
+    const status = document.getElementById('save-message');
+    if (!token) {
+        status.textContent = 'Постави GitHub token, за да заредиш съдържанието от repository.';
+        tokenInput.focus();
+        return;
+    }
+
+    connectButton.disabled = true;
+    status.textContent = 'Зареждане на последното съдържание от GitHub…';
+    githubToken = token;
+    try {
+        const kinds = ['posts', 'team'];
+        const loaded = await Promise.all(kinds.map(async type => {
+            const index = await readGitHubJson(`${githubContentRoot}/${type}/index.json`);
+            const entries = Array.isArray(index.value) ? index.value : [];
+            const files = await Promise.all(entries.map(async reference => {
+                const result = await readGitHubJson(reference.path, false);
+                remoteFiles[type].set(String(result.value.id), { path: reference.path, sha: result.sha });
+                return result.value;
+            }));
+            remoteIndexes[type] = { entries, sha: index.sha };
+            return [type, files];
+        }));
+
+        content = normalizeContent(Object.fromEntries(loaded));
+        githubConnected = true;
+        window.siteContent = content;
+        renderLists();
+        status.textContent = 'Свързано. Данните са заредени от GitHub; всеки запис създава JSON файл и commit.';
+    } catch (error) {
+        githubConnected = false;
+        githubToken = '';
+        status.textContent = error.message || 'Неуспешна връзка с GitHub. Провери token-а и интернет връзката.';
+    } finally {
+        connectButton.disabled = false;
+    }
+}
 document.getElementById('backup-button').addEventListener('click', () => {
     downloadFile('newspaper-content.json', JSON.stringify(content, null, 2), 'application/json');
 });
@@ -245,8 +410,13 @@ document.getElementById('import-file').addEventListener('change', async event =>
     try {
         const imported = JSON.parse(await file.text());
         if (!Array.isArray(imported.posts) || !Array.isArray(imported.team)) throw new Error('Invalid content');
-        content = imported;
-        saveContent('Съдържанието е импортирано.');
+        for (const post of imported.posts) {
+            if (!await saveEntry('posts', post, `Import post: ${post.title}`)) return;
+        }
+        for (const member of imported.team) {
+            if (!await saveEntry('team', member, `Import team member: ${member.name}`)) return;
+        }
+        document.getElementById('save-message').textContent = 'JSON записите са публикувани в GitHub.';
     } catch {
         document.getElementById('save-message').textContent = 'Файлът не е валиден JSON архив на съдържанието.';
     }

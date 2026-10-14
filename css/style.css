@@ -821,6 +821,38 @@ body {
     cursor: pointer;
 }
 
+.github-publish {
+    max-width: 900px;
+    display: grid;
+    gap: 0.55rem;
+    margin: 1rem auto;
+}
+
+.github-publish label {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.github-publish input {
+    width: 100%;
+    min-height: 42px;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #c9cfd3;
+    border-radius: 3px;
+    color: var(--text-primary);
+    background: white;
+    font: inherit;
+}
+
+.github-publish input:focus {
+    outline: 2px solid rgba(44, 90, 125, 0.25);
+    border-color: var(--primary-color);
+}
+
+.github-publish .form-note {
+    margin: 0;
+}
+
 @media (max-width: 720px) {
     .admin-heading,
     .admin-section-heading {

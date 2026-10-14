@@ -1,15 +1,20 @@
 const publishedContent = window.siteContent || { posts: [], team: [] };
-const localContent = readSavedContent();
-let posts = localContent ? localContent.posts : publishedContent.posts;
-let teamMembers = localContent ? localContent.team : (publishedContent.team || []);
+const appScriptUrl = document.currentScript ? document.currentScript.src : window.location.href;
+const siteRootUrl = new URL('../', appScriptUrl);
 
-function readSavedContent() {
-    try {
-        const saved = localStorage.getItem('newspaper-content');
-        return saved ? JSON.parse(saved) : null;
-    } catch {
-        return null;
-    }
+let posts = publishedContent.posts || [];
+let teamMembers = publishedContent.team || [];
+
+async function loadContentFiles(type) {
+    const indexUrl = new URL(`js/content/${type}/index.json`, siteRootUrl);
+    const indexResponse = await fetch(indexUrl, { cache: 'no-store' });
+    if (!indexResponse.ok) throw new Error(`Could not load ${type} index`);
+    const files = await indexResponse.json();
+    return Promise.all(files.map(async entry => {
+        const fileResponse = await fetch(new URL(entry.path, siteRootUrl), { cache: 'no-store' });
+        if (!fileResponse.ok) throw new Error(`Could not load content file ${entry.path}`);
+        return fileResponse.json();
+    }));
 }
 
 // Get posts by category
@@ -194,7 +199,17 @@ function formatContent(content) {
 }
 
 // Initialize based on page
-document.addEventListener('DOMContentLoaded', function() {
+async function initializePublicPage() {
+    try {
+        [posts, teamMembers] = await Promise.all([
+            loadContentFiles('posts'),
+            loadContentFiles('team')
+        ]);
+        window.siteContent = { posts, team: teamMembers };
+    } catch (error) {
+        console.error('Could not load published JSON content from the repository.', error);
+    }
+
     // Check which page we're on
     const pageTitle = document.title;
     
@@ -223,4 +238,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     renderTeamMembers();
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializePublicPage, { once: true });
+} else {
+    initializePublicPage();
+}
